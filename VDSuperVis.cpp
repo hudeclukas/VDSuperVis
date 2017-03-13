@@ -1,17 +1,13 @@
 #include <vtkSmartPointer.h>
-#include <vtkImageViewer2.h>
-#include <vtkPNGReader.h>
-#include <vtkJPEGReader.h>
 #include <vtkRenderWindow.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkRenderer.h>
-#include <vtkImageData.h>
-#include <vtkPolyData.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkProperty.h>
-#include <vtkPointData.h>
-#include <vtkVertexGlyphFilter.h>
 #include <vtkCamera.h>
+#include <map>
+
+#include "Superpixel.h"
 
 int main(int argc, char* argv[]) {
     argc = 4;
@@ -25,80 +21,32 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Read the image
-    vtkSmartPointer<vtkJPEGReader> jpgReader = vtkSmartPointer<vtkJPEGReader>::New();
-    vtkSmartPointer<vtkPNGReader> pngReader = vtkSmartPointer<vtkPNGReader>::New();
-    if (!jpgReader->CanReadFile(rgbPath.c_str())) {
-        std::cerr << "Error reading file " << rgbPath << std::endl;
-        return EXIT_FAILURE;
-    }
-    if (!pngReader->CanReadFile(supPath.c_str())) {
-        std::cerr << "Error reading file " << supPath << std::endl;
-        return EXIT_FAILURE;
-    }
-    jpgReader->SetFileName(rgbPath.c_str());
-    jpgReader->Update();
-    pngReader->SetFileName(supPath.c_str());
-    pngReader->Update();
+	auto superpixels = Superpixel::loadSuperpixels(rgbPath, supPath, feaPath);
 
-    vtkSmartPointer<vtkImageData> imageData;
-    imageData = jpgReader->GetOutput();
-    vtkSmartPointer<vtkImageData> superpixels;
-    superpixels = pngReader->GetOutput();
-    auto dim = imageData->GetDimensions();
-	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
-
-	unsigned char * pixels = static_cast<unsigned char*>(imageData->GetScalarPointer(0, 0, 0));
-	unsigned short * indexes = static_cast<unsigned short*>(superpixels->GetScalarPointer(0, 0, 0));
-	vtkSmartPointer<vtkUnsignedCharArray> colors = vtkSmartPointer<vtkUnsignedCharArray>::New();
-	colors->SetNumberOfComponents(3);
-	
-	for (auto z = 0; z < dim[2]; ++z)
-	{
-		for (auto y = 0; y < dim[1]; ++y) 
-		{
-			for (auto x = 0; x < dim[0]; ++x) 
-			{
-				unsigned char color[3];
-				color[0] = *pixels++;
-				color[1] = *pixels++;
-				color[2] = *pixels++;
-				double idx = *indexes++;
-				points->InsertNextPoint(x, y, idx);
-				colors->SetName("Image");
-				colors->InsertNextTypedTuple(color);
-			}
-		}
-	}
-	vtkSmartPointer<vtkPolyData> pointsPolyData = vtkSmartPointer<vtkPolyData>::New();
-	pointsPolyData->SetPoints(points);
-	vtkSmartPointer<vtkVertexGlyphFilter> vertexFilter = vtkSmartPointer<vtkVertexGlyphFilter>::New();
-	vertexFilter->SetInputData(pointsPolyData);
-	vertexFilter->Update();
-	vtkSmartPointer<vtkPolyData> imageInSpace = vtkSmartPointer<vtkPolyData>::New();
-	imageInSpace->ShallowCopy(vertexFilter->GetOutput());
-	imageInSpace->GetPointData()->SetScalars(colors);
-
-	// Create a mapper and actor
-	vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-	mapper->SetInputData(imageInSpace);
-	vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
-	actor->SetMapper(mapper);
-	actor->GetProperty()->SetPointSize(2);
 	// Create a renderer, render window, and interactor
 	vtkSmartPointer<vtkRenderer> renderer3D = vtkSmartPointer<vtkRenderer>::New();
 	vtkSmartPointer<vtkRenderWindow> renderWindow3D = vtkSmartPointer<vtkRenderWindow>::New();
 	renderWindow3D->AddRenderer(renderer3D);
 	vtkSmartPointer<vtkRenderWindowInteractor> renderWindowInteractor3D = vtkSmartPointer<vtkRenderWindowInteractor>::New();
 	renderWindowInteractor3D->SetRenderWindow(renderWindow3D);
-	// Add the actor to the scene
-	renderer3D->AddActor(actor);
 	renderer3D->SetBackground(0.2, 0.2, 0.2); 
 	renderer3D->GetActiveCamera()->ParallelProjectionOn();
 
+	// Create a mappers and actors
+	for (auto sup : superpixels)
+	{
+		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		mapper->SetInputData(sup.second.getSuperpixel());
+		vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+		actor->SetMapper(mapper);
+		actor->GetProperty()->SetPointSize(2);
+		// Add the actor to the scene
+		renderer3D->AddActor(actor);
+	}
+
+
 	// Render and interact
 	renderWindow3D->Render();
-
 	renderWindow3D->Start();
 	renderWindowInteractor3D->Start();
 
