@@ -4,6 +4,8 @@
 // UserGui.h
 #include "ui_UserGui.h"
 
+#include <QtConcurrent/QtConcurrent>
+
 #include <vtkPolyDataMapper.h>
 #include <vtkProperty.h>
 #include <vtkRenderer.h>
@@ -35,20 +37,28 @@ void UserGui::addAxes()
 	axes->SetCamera(renderer3D->GetActiveCamera());
 
 	axes->SetBounds(bounds);
-	axes->SetLabelOffset(3);
+	//axes->SetLabelOffset(3);
+	axes->SetTitleOffset(axes->GetLabelOffset() + 3);
 
 	axes->GetXAxesLinesProperty()->SetColor(0, 0, 0);
 	axes->GetYAxesLinesProperty()->SetColor(0, 0, 0);
 	axes->GetZAxesLinesProperty()->SetColor(0, 0, 0);
 
-	axes->GetTitleTextProperty(0)->SetColor(1.0, 0.0, 0.0);
-	axes->GetLabelTextProperty(0)->SetColor(1.0, 0.0, 0.0);
-	axes->GetLabelTextProperty(0)->SetFontSize(15);
+	axes->SetXTitle("");
+	axes->SetXAxisLabelVisibility(0);
+	//axes->SetXTitle("Cols");
+	//axes->GetTitleTextProperty(0)->SetColor(1.0, 0.0, 0.0);
+	//axes->GetLabelTextProperty(0)->SetColor(1.0, 0.0, 0.0);
+	//axes->GetLabelTextProperty(0)->SetFontSize(15);
 
-	axes->GetTitleTextProperty(1)->SetColor(0.0, 1.0, 0.0);
-	axes->GetLabelTextProperty(1)->SetColor(0.0, 1.0, 0.0);
-	axes->GetLabelTextProperty(1)->SetFontSize(15);
+	axes->SetYTitle("");
+	axes->SetYAxisLabelVisibility(0);
+	//axes->SetYTitle("Rows");
+	//axes->GetTitleTextProperty(1)->SetColor(0.1, 0.5, 0.0);
+	//axes->GetLabelTextProperty(1)->SetColor(0.1, 0.5, 0.0);
+	//axes->GetLabelTextProperty(1)->SetFontSize(15);
 
+	axes->SetZTitle("Cosine similarity");
 	axes->GetTitleTextProperty(2)->SetColor(0.0, 0.0, 1.0);
 	axes->GetLabelTextProperty(2)->SetColor(0.0, 0.0, 1.0);
 	axes->GetLabelTextProperty(2)->SetFontSize(15);
@@ -70,13 +80,12 @@ UserGui::UserGui() {
 	this->ui->setupUi(this);
 	this->ui->progressBar->hide();
 	this->fileDialog = new QFileDialog(nullptr, tr("Select image"), QString(), tr("Image Files (*.jpg)"));
-
+	this->colorDialog = new QColorDialog(QColor(255, 0, 0));
 
 	// Create a renderer, render window, and interactor
 	renderer3D = vtkSmartPointer<vtkRenderer>::New();
 	renderer3D->SetBackground(0.8, 0.8, 0.8);
 	renderer3D->GetActiveCamera()->ParallelProjectionOn();
-	renderer3D->GetActiveCamera()->SetViewUp(-1, 0, 0);
 
 	addAxes();
 
@@ -88,17 +97,50 @@ UserGui::UserGui() {
 	// Set up action signals and slots
 	connect(this->ui->actionExit, SIGNAL(triggered()), this, SLOT(slotExit()));
 	connect(this->ui->actionLoad_data, SIGNAL(triggered()), this, SLOT(loadData()));
-	connect(this->ui->buttonVisualize, SIGNAL(clicked()), this, SLOT(visualizationThread()));
+	connect(this->ui->actionContour_color, SIGNAL(triggered()), this, SLOT(colorPicker()));
+	connect(this->colorDialog, SIGNAL(currentColorChanged(QColor)), this, SLOT(changeContourColor(QColor)));
+	connect(this->ui->buttonVisualize, SIGNAL(clicked()), this, SLOT(visualizeData()));
 	connect(this->ui->buttonFlip, SIGNAL(clicked()), this, SLOT(flipAngle()));
+	connect(this->ui->checkboxContours, SIGNAL(clicked(bool)), this, SLOT(showContours(bool)));
+	connect(&this->FutureWatcher, SIGNAL(finished()), this, SLOT(visualizeDataFinished()));
 }
 
 void UserGui::slotExit() {
 	qApp->exit();
 }
 
+void UserGui::colorPicker()
+{
+	if (!contours)
+	{
+		return;
+	}
+	contours->InitTraversal();
+	double old_color[3];
+	contours->GetNextItem()->GetProperty()->GetColor(old_color);
+	if (colorDialog->exec() == QDialog::Rejected)
+	{
+		QColor color = QColor(old_color[0] * 255, old_color[1] * 255, old_color[2] * 255);
+		changeContourColor(color);
+	}
+}
+
+void UserGui::changeContourColor(QColor color)
+{
+	if (!contours) {
+		return;
+	}
+	contours->InitTraversal();
+	for (vtkIdType i = 0; i < contours->GetNumberOfItems(); i++) {
+		vtkSmartPointer<vtkActor> c = contours->GetNextItem();
+		c->GetProperty()->SetColor(color.redF(), color.greenF(), color.blueF());
+	}
+	this->ui->qvtkWidget->GetRenderWindow()->Render();
+}
+
 void UserGui::loadData()
 {
-	if (fileDialog->exec())
+	if (fileDialog->exec() == QDialog::Accepted)
 	{
 		QString file = fileDialog->selectedFiles()[0];
 		rgbPath = file.toStdString();
@@ -113,6 +155,7 @@ void UserGui::loadData()
 		superpixels = Superpixel::loadSuperpixels(rgbPath, supPath, dptPath, feaPath);
 		similarityMatrix = sm.getSimilarityMatrix(superpixels);
 	}
+	ui->buttonVisualize->setDisabled(false);
 }
 
 void UserGui::visualizeData()
@@ -121,7 +164,6 @@ void UserGui::visualizeData()
 	{
 		renderer3D->RemoveAllViewProps();
 	}
-
 
 	//showSilhuette();
 	//computeSurface();
@@ -133,6 +175,7 @@ void UserGui::visualizeData()
 		similarityMatrix = sm.getSimilarityMatrix(superpixels);
 	}
 
+	this->ui->progressBar->show();
 	this->ui->buttonVisualize->setDisabled(true);
 	this->ui->progressBar->setValue(0);
 	this->ui->progressBar->setRange(0, superpixels.size());
@@ -149,8 +192,10 @@ void UserGui::visualizeData()
 		bounds[i + 1] = LONG_MIN;
 	}
 
+	auto mean_similarity = sm.getMeanSimilarity();
+
 	for (auto sup : sups) {
-		sup.second.setHeight(1000 * similarityMatrix.at<double>(0, sup.second.m_id));
+		sup.second.setHeight(1000 * mean_similarity[sup.second.m_id]);
 		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 		mapper->SetInputData(sup.second.getSuperpixel());
 		vtkSmartPointer<vtkActor> actor_segment = vtkSmartPointer<vtkActor>::New();
@@ -176,10 +221,10 @@ void UserGui::visualizeData()
 		actor_contour->SetMapper(mapper_contour);
 		actor_contour->GetProperty()->SetLineWidth(2.);
 		actor_contour->GetProperty()->SetColor(0.8, 0., 0.);
+		actor_contour->SetVisibility(ui->checkboxContours->isChecked());
 		contours->AddItem(actor_contour);
 		// Add actor to the scene
 		renderer3D->AddActor(actor_contour);
-
 
 		ui->progressBar->setValue(ui->progressBar->value() + 1);
 	}
@@ -188,7 +233,7 @@ void UserGui::visualizeData()
 	this->ui->qvtkWidget->GetRenderWindow()->Render();
 	renderer3D->ResetCamera();
 
-	this->ui->buttonVisualize->setDisabled(false);
+	ui->progressBar->hide();
 }
 
 void UserGui::visualizeDataFinished()
@@ -202,9 +247,11 @@ void UserGui::flipAngle()
 	{
 		return;
 	}
+	segments->InitTraversal();
+	contours->InitTraversal();
 	for (vtkIdType i = 0; i < segments->GetNumberOfItems(); i++)
 	{
-		vtkSmartPointer<vtkActor> a = segments->GetNextActor();
+		vtkSmartPointer<vtkActor> a = segments->GetNextItem();
 		double* position = superpixels[i].getCentroid();
 		vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
 		transform->PostMultiply(); //this is the key line
@@ -213,18 +260,35 @@ void UserGui::flipAngle()
 		transform->Translate(position);
 		a->SetUserTransform(transform);
 
-		vtkSmartPointer<vtkActor> b = contours->GetNextActor();
+		vtkSmartPointer<vtkActor> b = contours->GetNextItem();
 		b->SetUserTransform(transform);
 	}
 	this->ui->qvtkWidget->GetRenderWindow()->Render();
-	rotation *= -1;
+	if (rotation == -90) 
+	{
+		rotation = 0;
+	} else
+	{
+		rotation = -90;
+	}
+}
+
+void UserGui::showContours(bool change)
+{
+	if (!contours) {
+		return;
+	}
+	contours->InitTraversal();
+	for (vtkIdType i = 0; i < contours->GetNumberOfItems(); i++) {
+		vtkSmartPointer<vtkActor> c = contours->GetNextItem();
+		c->SetVisibility(change);
+	}
+	this->ui->qvtkWidget->GetRenderWindow()->Render();
 }
 
 void UserGui::visualizationThread()
 {
-	//QThread *visualThread = new QThread();
 	//this->ui->progressBar->show();
-	//connect(visualThread, SIGNAL(started()), this, SLOT(visualizeData()));
-	//connect(visualThread, SIGNAL(finished()), this, SLOT(visualizeDataFinished()));
-	//visualThread->start();
+	//QFuture<void> future = QtConcurrent::run(this, visualizeData);
+	//this->FutureWatcher.setFuture(future);
 }

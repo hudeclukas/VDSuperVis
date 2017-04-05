@@ -2,14 +2,16 @@
 #include <opencv2/opencv.hpp>
 class SimilarityMatrix {
 	cv::Mat m_matrix;
+	std::vector<float> m_meanSimilarity;
 public:
 	SimilarityMatrix();
 	~SimilarityMatrix();
 
 	template<typename Type>
 	cv::Mat& getSimilarityMatrix(std::map<int, Type> items);
-	template<typename Type>
-	std::vector<float> getDistances(std::map<int, Type> items);
+
+	std::vector<float> getMeanSimilarity() { return m_meanSimilarity; }
+
 	cv::Mat getLastSimilarityMatrix() { return m_matrix; }
 };
 
@@ -18,6 +20,7 @@ cv::Mat& SimilarityMatrix::getSimilarityMatrix(std::map<int, Type> items) {
 	m_matrix.create(items.size(), items.size(), CV_64FC1);
 	for (auto row = 0; row < m_matrix.rows; ++row)
 	{
+		m_meanSimilarity.push_back(0);
 		for (auto col = 0; col < m_matrix.cols; ++col)
 		{
 			if (col == row) 
@@ -30,14 +33,9 @@ cv::Mat& SimilarityMatrix::getSimilarityMatrix(std::map<int, Type> items) {
 			double similarity = it1.cosineSimilarity(it2);
 			m_matrix.at<double>(row, col) = similarity;
 			m_matrix.at<double>(col, row) = similarity;
+			m_meanSimilarity[row] += similarity;
 		}
+		m_meanSimilarity[row] /= m_matrix.cols;
 	}
 	return m_matrix;
-}
-
-template <typename Type>
-std::vector<float> SimilarityMatrix::getDistances(std::map<int, Type> items)
-{
-	std::vector<float> x(items.size(), 0);
-	return x;
 }

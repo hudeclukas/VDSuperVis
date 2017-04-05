@@ -7,6 +7,7 @@
 
 #include <QMainWindow>
 #include <QFileDialog>
+#include <QColorDialog>
 #include <QFutureWatcher>
 
 #include <opencv2/opencv.hpp>
@@ -29,14 +30,18 @@ public:
 	public slots:
 
 	virtual void slotExit();
+	void colorPicker();
+	void changeContourColor(QColor color);
 	void loadData();
 	void visualizeData();
 	void visualizeDataFinished();
 	void visualizationThread();
 	void flipAngle();
+	void showContours(bool change);
 
 private:
 	// Threads
+	QFutureWatcher<void> FutureWatcher;
 
 	// Data
 	std::string rgbPath = "D:/RGBD datasets/VD/000002_2014-05-26_14-23-37_260595134347_rgbf000103-resize/image/0000103.jpg";
@@ -51,13 +56,14 @@ private:
 	int rotation = -90;
 	double bounds[6] = { 0,1,0,1,0,1 };
 
-	vtkSmartPointer<vtkActorCollection> segments;
-	vtkSmartPointer<vtkActorCollection> contours;
+	vtkSmartPointer<vtkActorCollection> segments = vtkSmartPointer<vtkActorCollection>::New();
+	vtkSmartPointer<vtkActorCollection> contours = vtkSmartPointer<vtkActorCollection>::New();
 
 
 	// Designer form
 	Ui_UserGui *ui;
 	QFileDialog *fileDialog;
+	QColorDialog *colorDialog;
 
 	// Interactor
 	vtkSmartPointer<vtkRenderWindowInteractor> renderWindowInteractor3D = vtkSmartPointer<vtkRenderWindowInteractor>::New();
