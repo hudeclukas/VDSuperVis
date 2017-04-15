@@ -30,35 +30,49 @@ public:
 	public slots:
 
 	virtual void slotExit();
-	void colorPicker();
+	void contourColorPicker();
+	void filterPlaneMinColorPicker();
+	void filterPlaneMaxColorPicker();
 	void changeContourColor(QColor color);
+	void changeFilterPlaneMaxColor(QColor color);
+	void changeFilterPlaneMinColor(QColor color);
 	void loadData();
 	void visualizeData();
 	void visualizeDataFinished();
 	void visualizationThread();
-	void flipAngle();
+	void flipAngle(double rotation);
+	void flipSegments(int type);
 	void showContours(bool change);
-
+	void minFilter(double min);
+	void maxFilter(double max);
+	void filterPlanes(bool check);
+	void filterDelete(bool check);
 private:
+	// functions
+	void noDataWarning();
+	void resetCameraView();
+	void constrainSpinBoxes(double min, double max);
+	vtkSmartPointer<vtkActor> generateSquare();
+
 	// Threads
 	QFutureWatcher<void> FutureWatcher;
 
 	// Data
-	std::string rgbPath = "D:/RGBD datasets/VD/000002_2014-05-26_14-23-37_260595134347_rgbf000103-resize/image/0000103.jpg";
-	std::string dptPath = "D:/RGBD datasets/VD/000002_2014-05-26_14-23-37_260595134347_rgbf000103-resize/depth/0000103.png";
-	std::string supPath = "D:/RGBD datasets/VD/000002_2014-05-26_14-23-37_260595134347_rgbf000103-resize/image/superpixels.png";
-	std::string feaPath = "D:/RGBD datasets/VD/000002_2014-05-26_14-23-37_260595134347_rgbf000103-resize/image/features.txt";
+	std::string rgbPath;
+	std::string dptPath;
+	std::string supPath;
+	std::string feaPath;
 
 	std::map<int, Superpixel> superpixels;
 	cv::Mat similarityMatrix;
 	SimilarityMatrix sm;
 
-	int rotation = -90;
 	double bounds[6] = { 0,1,0,1,0,1 };
 
 	vtkSmartPointer<vtkActorCollection> segments = vtkSmartPointer<vtkActorCollection>::New();
 	vtkSmartPointer<vtkActorCollection> contours = vtkSmartPointer<vtkActorCollection>::New();
-
+	vtkSmartPointer<vtkActor> minPlane = nullptr;
+	vtkSmartPointer<vtkActor> maxPlane = nullptr;
 
 	// Designer form
 	Ui_UserGui *ui;
