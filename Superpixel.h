@@ -20,6 +20,7 @@ public:
 	Superpixel();
 	virtual ~Superpixel();
 	double * getFeatureArray() const;
+	std::string * getFeatureNamesArray() const;
 
 	static std::map<int, Superpixel> loadSuperpixels(std::string image, std::string indexes, std::string depth, std::string features);
 

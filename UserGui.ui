@@ -16,46 +16,27 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="centralGridLayout">
+    <item row="0" column="1">
+     <spacer name="hrSpacer_2">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="sizeType">
+       <enum>QSizePolicy::Preferred</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>10</width>
+        <height>20</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
     <item row="0" column="0">
      <layout class="QGridLayout" name="gridLayout">
       <property name="sizeConstraint">
        <enum>QLayout::SetNoConstraint</enum>
       </property>
-      <item row="0" column="0">
-       <widget class="QVTKWidget" name="qvtkWidget" native="true">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>640</width>
-          <height>480</height>
-         </size>
-        </property>
-        <property name="cursor">
-         <cursorShape>CrossCursor</cursorShape>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <spacer name="hrSpacer_1">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeType">
-         <enum>QSizePolicy::Preferred</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>20</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
       <item row="0" column="2">
        <layout class="QVBoxLayout" name="toolboxLayout">
         <property name="spacing">
@@ -91,6 +72,9 @@
           <property name="text">
            <string>Visualize</string>
           </property>
+          <property name="autoDefault">
+           <bool>true</bool>
+          </property>
          </widget>
         </item>
         <item>
@@ -103,6 +87,16 @@
           </property>
           <property name="value">
            <number>0</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="buttonResetView">
+          <property name="text">
+           <string>Reset View</string>
+          </property>
+          <property name="shortcut">
+           <string>R</string>
           </property>
          </widget>
         </item>
@@ -224,40 +218,131 @@
          </widget>
         </item>
         <item>
-         <spacer name="vtSpacer_1">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
+         <layout class="QGridLayout" name="gridLayout_3">
+          <item row="0" column="0">
+           <widget class="QLabel" name="selectionLabel">
+            <property name="text">
+             <string>Selection:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QPushButton" name="buttonClearSelect">
+            <property name="text">
+             <string>Clear selection</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QGridLayout" name="gridLayout_2">
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="checkBoxSelect">
+            <property name="text">
+             <string>Select segment</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QCheckBox" name="checkBoxMultiSelect">
+            <property name="text">
+             <string>MultiSelect</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QPushButton" name="buttonMeanSim">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="toolTip">
+             <string>Mean similarity</string>
+            </property>
+            <property name="text">
+             <string>Mean similarity</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QPushButton" name="buttonSelectSim">
+            <property name="toolTip">
+             <string>First Select</string>
+            </property>
+            <property name="text">
+             <string>First selected</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QTreeWidget" name="segmentsTree">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
           </property>
-          <property name="sizeType">
-           <enum>QSizePolicy::MinimumExpanding</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
+          <property name="maximumSize">
            <size>
-            <width>20</width>
-            <height>100</height>
+            <width>202</width>
+            <height>16777215</height>
            </size>
           </property>
-         </spacer>
+          <column>
+           <property name="text">
+            <string>Segments</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Value</string>
+           </property>
+          </column>
+         </widget>
         </item>
        </layout>
       </item>
+      <item row="0" column="1">
+       <spacer name="hrSpacer_1">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Preferred</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item row="0" column="0">
+       <widget class="QVTKWidget" name="qvtkWidget" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>640</width>
+          <height>480</height>
+         </size>
+        </property>
+        <property name="cursor">
+         <cursorShape>CrossCursor</cursorShape>
+        </property>
+       </widget>
+      </item>
      </layout>
-    </item>
-    <item row="0" column="1">
-     <spacer name="hrSpacer_2">
-      <property name="orientation">
-       <enum>Qt::Horizontal</enum>
-      </property>
-      <property name="sizeType">
-       <enum>QSizePolicy::Preferred</enum>
-      </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>10</width>
-        <height>20</height>
-       </size>
-      </property>
-     </spacer>
     </item>
    </layout>
   </widget>
@@ -293,8 +378,8 @@
      </widget>
      <addaction name="actionContour_color"/>
      <addaction name="menuFilterPlane_color"/>
-     <addaction name="actionSelected_color"/>
-     <addaction name="actionNeighbors_color"/>
+     <addaction name="actionFSelected_color"/>
+     <addaction name="actionNSelected_color"/>
     </widget>
     <addaction name="menuColors"/>
    </widget>
@@ -326,14 +411,14 @@
     <string>Contour color</string>
    </property>
   </action>
-  <action name="actionSelected_color">
+  <action name="actionFSelected_color">
    <property name="text">
-    <string>Selected color</string>
+    <string>First selected color</string>
    </property>
   </action>
-  <action name="actionNeighbors_color">
+  <action name="actionNSelected_color">
    <property name="text">
-    <string>Neighbors color</string>
+    <string>Others selected color</string>
    </property>
   </action>
   <action name="actionFilterMin_color">

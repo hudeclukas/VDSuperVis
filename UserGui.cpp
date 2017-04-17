@@ -18,102 +18,138 @@
 #include <vtkTextProperty.h>
 #include <vtkCamera.h>
 #include <vtkTransform.h>
-#include <vtkStringArray.h>
 #include <map>
 
 #include <opencv2/opencv.hpp>
 
-#include "Sample.h"
 #include "UserInputParser.h"
 #include "Superpixel.h"
 #include "SimilarityMatrix.h"
+#include "MouseInteractorStyle.h"
+
+
 
 void UserGui::addAxes()
 {
-	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-	transform->Scale(1000.0, 1000.0, 1000.0);
-	vtkSmartPointer<vtkCubeAxesActor> axes = vtkSmartPointer<vtkCubeAxesActor>::New();
+	if (!axes) {
+		axes = vtkSmartPointer<vtkCubeAxesActor>::New();
+		vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+		transform->Scale(1000.0, 1000.0, 1000.0);
 
-	axes->SetUserTransform(transform);
-	axes->SetCamera(renderer3D->GetActiveCamera());
+		axes->SetUserTransform(transform);
+		axes->SetCamera(renderer3D->GetActiveCamera());
 
-	axes->SetBounds(bounds);
-	axes->SetZAxisRange(bounds[4]/1000, bounds[5]/1000);
-	//axes->SetLabelOffset(3);
-	axes->SetTitleOffset(axes->GetLabelOffset() + 3);
+		axes->SetBounds(bounds);
+		axes->SetZAxisRange(bounds[4] / 1000, bounds[5] / 1000);
+		axes->SetTitleOffset(axes->GetLabelOffset() + 3);
 
-	axes->GetXAxesLinesProperty()->SetColor(0, 0, 0);
-	axes->GetYAxesLinesProperty()->SetColor(0, 0, 0);
-	axes->GetZAxesLinesProperty()->SetColor(0, 0, 0);
+		axes->GetXAxesLinesProperty()->SetColor(0, 0, 0);
+		axes->GetYAxesLinesProperty()->SetColor(0, 0, 0);
+		axes->GetZAxesLinesProperty()->SetColor(0, 0, 0);
 
-	axes->SetXTitle("");
-	axes->SetXAxisLabelVisibility(0);
-	//axes->SetXTitle("Cols");
-	//axes->GetTitleTextProperty(0)->SetColor(1.0, 0.0, 0.0);
-	//axes->GetLabelTextProperty(0)->SetColor(1.0, 0.0, 0.0);
-	//axes->GetLabelTextProperty(0)->SetFontSize(15);
+		axes->SetXTitle("");
+		axes->SetXAxisLabelVisibility(0);
 
-	axes->SetYTitle("");
-	axes->SetYAxisLabelVisibility(0);
-	//axes->SetYTitle("Rows");
-	//axes->GetTitleTextProperty(1)->SetColor(0.1, 0.5, 0.0);
-	//axes->GetLabelTextProperty(1)->SetColor(0.1, 0.5, 0.0);
-	//axes->GetLabelTextProperty(1)->SetFontSize(15);
+		axes->SetYTitle("");
+		axes->SetYAxisLabelVisibility(0);
 
-	axes->SetZTitle("Cosine similarity");
-	axes->GetTitleTextProperty(2)->SetColor(0.0, 0.0, 1.0);
-	axes->GetLabelTextProperty(2)->SetColor(0.0, 0.0, 1.0);
-	axes->GetLabelTextProperty(2)->SetFontSize(15);
+		axes->SetZTitle("Cosine similarity");
+		axes->GetTitleTextProperty(2)->SetColor(0.0, 0.0, 1.0);
+		axes->GetLabelTextProperty(2)->SetColor(0.0, 0.0, 1.0);
+		//axes->GetLabelTextProperty(2)->SetFontSize(15);
 
-	axes->DrawXGridlinesOn();
-	axes->DrawYGridlinesOn();
-	axes->DrawZGridlinesOn();
+		axes->DrawXGridlinesOn();
+		axes->DrawYGridlinesOn();
+		axes->DrawZGridlinesOn();
 
-	axes->SetGridLineLocation(axes->VTK_GRID_LINES_FURTHEST);
-	axes->XAxisMinorTickVisibilityOff();
-	axes->YAxisMinorTickVisibilityOff();
-	
+		axes->SetGridLineLocation(axes->VTK_GRID_LINES_FURTHEST);
+		axes->XAxisMinorTickVisibilityOff();
+		axes->YAxisMinorTickVisibilityOff();
+	}
+	else
+	{
+		auto bnds = axes->GetBounds();
+		if (bnds[0] != bounds[0] ||
+			bnds[1] != bounds[1] || 
+			bnds[2] != bounds[2] || 
+			bnds[3] != bounds[3] || 
+			bnds[4] != bounds[4] || 
+			bnds[5] != bounds[5] )
+		{
+			axes->SetBounds(bounds);
+			axes->SetZAxisRange(bounds[4] / 1000, bounds[5] / 1000);
+		}
+	}
 	renderer3D->AddActor(axes);
 }
 
 // Constructor
 UserGui::UserGui() {
-	this->ui = new Ui_UserGui;
-	this->ui->setupUi(this);
-	this->ui->progressBar->hide();
-	this->fileDialog = new QFileDialog(nullptr, tr("Select image"), QString(), tr("Image Files (*.jpg)"));
-	this->colorDialog = new QColorDialog(QColor(255, 0, 0));
-	this->colorDialog->setOption(QColorDialog::ShowAlphaChannel);
-	this->ui->flipBox->setItemData(0, tr("Base segment view"), Qt::ToolTipRole);
-	this->ui->flipBox->setItemData(1, tr("Rotate segments 90deg by X axis"), Qt::ToolTipRole);
-	this->ui->flipBox->setItemData(2, tr("Set segments to follow camera"), Qt::ToolTipRole);
-
+	// Setup QT Gui
+	{
+		this->ui = new Ui_UserGui;
+		this->ui->setupUi(this);
+		this->ui->progressBar->hide();
+		this->fileDialog = new QFileDialog(nullptr, tr("Select image"), QString(), tr("Image Files (*.jpg)"));
+		this->colorDialog = new QColorDialog(QColor(255, 0, 0));
+		this->colorDialog->setOption(QColorDialog::ShowAlphaChannel);
+		this->ui->flipBox->setItemData(0, tr("Base segment view"), Qt::ToolTipRole);
+		this->ui->flipBox->setItemData(1, tr("Rotate segments 90deg by X axis"), Qt::ToolTipRole);
+		this->ui->flipBox->setItemData(2, tr("Set segments to follow camera"), Qt::ToolTipRole);
+		this->ui->segmentsTree->setSortingEnabled(true);
+		this->ui->segmentsTree->sortByColumn(0, Qt::AscendingOrder);
+	}
 	// Create a renderer, render window, and interactor
-	renderer3D = vtkSmartPointer<vtkRenderer>::New();
-	renderer3D->SetBackground(0.8, 0.8, 0.8);
-	renderer3D->GetActiveCamera()->ParallelProjectionOn();
-
-	addAxes();
-
+	{
+		renderer3D = vtkSmartPointer<vtkRenderer>::New();
+		renderer3D->SetBackground(0.8, 0.8, 0.8);
+		this->addAxes();
+	}
 	// VTK/Qt wedded
-	renderer3D->ResetCamera();
-	renderer3D->InteractiveOff();
-	this->ui->qvtkWidget->GetRenderWindow()->AddRenderer(renderer3D);
-
+	{
+		renderer3D->ResetCamera();
+		renderer3D->InteractiveOff();
+		this->ui->qvtkWidget->GetRenderWindow()->AddRenderer(renderer3D);
+	}
+	// Set interactor style
+	{
+		interactorStyle = vtkSmartPointer<MouseInteractorStyle>::New();
+		interactorStyle->SetDefaultRenderer(renderer3D);
+		this->ui->qvtkWidget->GetInteractor()->SetInteractorStyle(interactorStyle);
+	}
+	// Save camera position
+	{
+		this->saveCameraParams();
+	}
 	// Set up action signals and slots
-	connect(this->ui->actionExit, SIGNAL(triggered()), this, SLOT(slotExit()));
-	connect(this->ui->actionLoad_data, SIGNAL(triggered()), this, SLOT(loadData()));
-	connect(this->ui->actionContour_color, SIGNAL(triggered()), this, SLOT(contourColorPicker()));
-	connect(this->ui->actionFilterMin_color, SIGNAL(triggered()), this, SLOT(filterPlaneMinColorPicker()));
-	connect(this->ui->actionFilterMax_color, SIGNAL(triggered()), this, SLOT(filterPlaneMaxColorPicker()));
-	connect(this->ui->buttonVisualize, SIGNAL(clicked()), this, SLOT(visualizeData()));
-	connect(this->ui->flipBox, SIGNAL(currentIndexChanged(int)), this, SLOT(flipSegments(int)));
-	connect(this->ui->checkboxContours, SIGNAL(clicked(bool)), this, SLOT(showContours(bool)));
-	connect(this->ui->minSimilarity, SIGNAL(valueChanged(double)), this, SLOT(minFilter(double)));
-	connect(this->ui->maxSimilarity, SIGNAL(valueChanged(double)), this, SLOT(maxFilter(double)));
-	connect(this->ui->checkBoxPlanes, SIGNAL(clicked(bool)), this, SLOT(filterPlanes(bool)));
-	connect(this->ui->checkBoxDelete, SIGNAL(clicked(bool)), this, SLOT(filterDelete(bool)));
-	connect(&this->FutureWatcher, SIGNAL(finished()), this, SLOT(visualizeDataFinished()));
+	{
+		connect(this->ui->actionExit, SIGNAL(triggered()), this, SLOT(slotExit()));
+		connect(this->ui->actionLoad_data, SIGNAL(triggered()), this, SLOT(loadData()));
+		connect(this->ui->actionContour_color, SIGNAL(triggered()), this, SLOT(contourColorPicker()));
+		connect(this->ui->actionFilterMin_color, SIGNAL(triggered()), this, SLOT(filterPlaneMinColorPicker()));
+		connect(this->ui->actionFilterMax_color, SIGNAL(triggered()), this, SLOT(filterPlaneMaxColorPicker()));
+		connect(this->ui->actionFilterMax_color, SIGNAL(triggered()), this, SLOT(filterPlaneMaxColorPicker()));
+		connect(this->ui->actionFSelected_color, SIGNAL(triggered()), this, SLOT(selectFirstColorPicker()));
+		connect(this->ui->actionNSelected_color, SIGNAL(triggered()), this, SLOT(selectNextColorPicker()));
+		connect(this->ui->buttonVisualize, SIGNAL(clicked()), this, SLOT(visualizeData()));
+		connect(this->ui->flipBox, SIGNAL(currentIndexChanged(int)), this, SLOT(flipSegments(int)));
+		connect(this->ui->checkboxContours, SIGNAL(clicked(bool)), this, SLOT(showContours(bool)));
+		connect(this->ui->minSimilarity, SIGNAL(valueChanged(double)), this, SLOT(minFilter(double)));
+		connect(this->ui->maxSimilarity, SIGNAL(valueChanged(double)), this, SLOT(maxFilter(double)));
+		connect(this->ui->checkBoxPlanes, SIGNAL(clicked(bool)), this, SLOT(filterPlanes(bool)));
+		connect(this->ui->checkBoxDelete, SIGNAL(clicked(bool)), this, SLOT(filterDelete(bool)));
+		connect(&this->FutureWatcher, SIGNAL(finished()), this, SLOT(visualizeDataFinished()));
+
+		connect(this->ui->buttonResetView, SIGNAL(clicked()), this, SLOT(resetCameraView()));
+		connect(this->ui->buttonClearSelect, SIGNAL(clicked()), interactorStyle, SLOT(clearSelection()));
+		connect(this->ui->buttonClearSelect, SIGNAL(clicked()), this, SLOT(clearSegmentsTree()));
+
+		connect(this->ui->checkBoxSelect, SIGNAL(clicked(bool)), interactorStyle, SLOT(setSelect(bool)));
+		connect(this->ui->checkBoxMultiSelect, SIGNAL(clicked(bool)), interactorStyle, SLOT(setMultiSelect(bool)));
+		connect(this->interactorStyle, SIGNAL(pickedActor(int)), this, SLOT(focusSelected(int)));
+		connect(this->ui->buttonMeanSim, SIGNAL(clicked()), this, SLOT(visualizeMeanSim()));
+		connect(this->ui->buttonSelectSim, SIGNAL(clicked()), this, SLOT(visualizeSelectSim()));
+	}
 }
 
 void UserGui::slotExit() {
@@ -122,8 +158,14 @@ void UserGui::slotExit() {
 
 void UserGui::noDataWarning()
 {	
-	int ret = QMessageBox::warning(this, tr("Empty data"),
-		tr("To change contour color load data first."), QMessageBox::Ok,
+	QMessageBox::warning(this, tr("Empty data"),
+		tr("To change color load data first."), QMessageBox::Ok,
+		QMessageBox::Ok);
+}
+
+void UserGui::noSelectWarning() {
+	QMessageBox::warning(this, tr("Empty selection"),
+		tr("To change similarity mapping, select segment first."), QMessageBox::Ok,
 		QMessageBox::Ok);
 }
 
@@ -221,6 +263,24 @@ void UserGui::changeFilterPlaneMaxColor(QColor color) {
 	this->ui->qvtkWidget->GetRenderWindow()->Render();
 }
 
+void UserGui::selectFirstColorPicker() {
+	auto old_color = interactorStyle->getFirstSelectColor();
+	connect(this->colorDialog, SIGNAL(currentColorChanged(QColor)), interactorStyle, SLOT(setFirstSelectColor(QColor)));
+	if (colorDialog->exec() == QDialog::Rejected) {
+		interactorStyle->setFirstSelectColor(old_color);
+	}
+	disconnect(this->colorDialog, SIGNAL(currentColorChanged(QColor)), interactorStyle, SLOT(setFirstSelectColor(QColor)));
+}
+
+void UserGui::selectNextColorPicker() {
+	auto old_color = interactorStyle->getNextSelectColor();
+	connect(this->colorDialog, SIGNAL(currentColorChanged(QColor)), interactorStyle, SLOT(setNextSelectColor(QColor)));
+	if (colorDialog->exec() == QDialog::Rejected) {
+		interactorStyle->setNextSelectColor(old_color);
+	}
+	disconnect(this->colorDialog, SIGNAL(currentColorChanged(QColor)), interactorStyle, SLOT(setNextSelectColor(QColor)));
+}
+
 void UserGui::loadData()
 {
 	if (fileDialog->exec() == QDialog::Accepted)
@@ -255,6 +315,7 @@ void UserGui::loadData()
 
 void UserGui::visualizeData()
 {
+	this->resetCameraView();
 	if (renderer3D->GetActors()->GetNumberOfItems() > 0)
 	{
 		renderer3D->RemoveAllViewProps();
@@ -275,39 +336,33 @@ void UserGui::visualizeData()
 	this->ui->progressBar->setRange(0, range.size());
 
 	// Create a mappers and actors
-	std::map<int, Superpixel> sups;
+	sups.clear();
 	for (auto i : range) 
 	{
 		sups[i] = superpixels[i];
 	}
 
-	for (auto i = 0; i < 6; i+=2)
-	{
-		bounds[i] = LONG_MAX;
-		bounds[i + 1] = LONG_MIN;
-	}
+	this->resetBounds();
+	clearSegmentsTree();
+	interactorStyle->clearSelection();
 
-	auto mean_similarity = sm.getMeanSimilarity();
+	mean_similarity = sm.getMeanSimilarity();
 
 	for (auto sup : sups) {
-		sup.second.setHeight(1000 * mean_similarity[sup.second.m_id]);
+		// Map superpixels
+		//sup.second.setHeight(1000 * mean_similarity[sup.second.m_id]);
 		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 		mapper->SetInputData(sup.second.getSuperpixel());
 		vtkSmartPointer<vtkActor> actor_segment = vtkSmartPointer<vtkActor>::New();
 		actor_segment->SetMapper(mapper);
 		actor_segment->GetProperty()->SetPointSize(2);
+		setActorHeight(actor_segment, 1000 * mean_similarity[sup.second.m_id]);
+		segments->AddItem(actor_segment);
 		// Add the actor to the scene
 		renderer3D->AddActor(actor_segment);
-		segments->AddItem(actor_segment);
 
-		double* bnds = actor_segment->GetBounds();
-		bounds[0] = bnds[0] < bounds[0] ? bnds[0] : bounds[0];
-		bounds[1] = bnds[1] > bounds[1] ? bnds[1] : bounds[1];
-		bounds[2] = bnds[2] < bounds[2] ? bnds[2] : bounds[2];
-		bounds[3] = bnds[3] > bounds[3] ? bnds[3] : bounds[3];
-		bounds[4] = bnds[4] < bounds[4] ? bnds[4] : bounds[4];
-		bounds[5] = bnds[5] > bounds[5] ? bnds[5] : bounds[5];
-
+		this->addActorToBounds(actor_segment);
+		
 		// get superpixels contour
 		vtkSmartPointer<vtkPolyDataMapper> mapper_contour = vtkSmartPointer<vtkPolyDataMapper>::New();
 		mapper_contour->SetInputData(sup.second.getContour());
@@ -317,6 +372,7 @@ void UserGui::visualizeData()
 		actor_contour->GetProperty()->SetLineWidth(2.);
 		actor_contour->GetProperty()->SetColor(0.8, 0., 0.);
 		actor_contour->SetVisibility(ui->checkboxContours->isChecked());
+		setActorHeight(actor_contour, 1000 * mean_similarity[sup.second.m_id]);
 		contours->AddItem(actor_contour);
 		// Add actor to the scene
 		renderer3D->AddActor(actor_contour);
@@ -324,10 +380,15 @@ void UserGui::visualizeData()
 		ui->progressBar->setValue(ui->progressBar->value() + 1);
 	}
 
+	interactorStyle->setActors(segments);
 	constrainSpinBoxes((bounds[4]-10)/1000, (bounds[5]+10)/1000);
 	addAxes();
 	this->ui->qvtkWidget->GetRenderWindow()->Render();
-	resetCameraView();
+	this->renderer3D->ResetCamera();
+	saveCameraParams();
+
+	this->ui->qvtkWidget->GetRenderWindow()->Render();
+
 	ui->progressBar->hide();
 }
 
@@ -335,6 +396,15 @@ void UserGui::visualizeDataFinished()
 {
 	this->ui->progressBar->hide();
 }
+
+void UserGui::setActorHeight(vtkActor* prop, double h)
+{
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	transform->PostMultiply(); //this is the key line
+	transform->Translate(0,0,h);
+	prop->SetUserTransform(transform);
+}
+
 
 void UserGui::flipAngle(double rotation)
 {
@@ -347,12 +417,16 @@ void UserGui::flipAngle(double rotation)
 	for (vtkIdType i = 0; i < segments->GetNumberOfItems(); i++)
 	{
 		vtkSmartPointer<vtkActor> a = segments->GetNextItem();
-		double* position = superpixels[i].getCentroid();
+		auto actorTransform = a->GetUserTransform();
+		vtkTransform* actorVtkTransform = vtkTransform::SafeDownCast(actorTransform);
+		auto positionTransform = actorVtkTransform->GetPosition();
+		auto positionCentroid = superpixels[i].getCentroid();
+		positionCentroid[2] = positionTransform[2];
 		vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
 		transform->PostMultiply(); //this is the key line
-		transform->Translate(-position[0], -position[1], -position[2]);
+		transform->Translate(-positionCentroid[0], -positionCentroid[1], -positionCentroid[2]);
 		transform->RotateX(rotation);
-		transform->Translate(position);
+		transform->Translate(positionCentroid);
 		a->SetUserTransform(transform);
 
 		vtkSmartPointer<vtkActor> b = contours->GetNextItem();
@@ -541,8 +615,25 @@ void UserGui::filterDelete(bool deleteCheck)
 
 void UserGui::resetCameraView()
 {
-	renderer3D->GetActiveCamera()->SetViewUp(0, 1, 0);
+	auto camera = renderer3D->GetActiveCamera();
+	camera->SetPosition(position);
+	camera->SetViewUp(0, 1, 0);
 	renderer3D->ResetCamera();
+
+	this->ui->qvtkWidget->GetRenderWindow()->Render();
+}
+
+void UserGui::clearSegmentsTree()
+{
+	this->ui->segmentsTree->clear();
+	this->selectedInTree.clear();
+}
+
+void UserGui::saveCameraParams()
+{
+	auto camera = renderer3D->GetActiveCamera();
+	camera->ParallelProjectionOn();
+	camera->GetPosition(position);
 }
 
 void UserGui::visualizationThread()
@@ -550,4 +641,152 @@ void UserGui::visualizationThread()
 	//this->ui->progressBar->show();
 	//QFuture<void> future = QtConcurrent::run(this, visualizeData);
 	//this->FutureWatcher.setFuture(future);
+}
+
+QTreeWidgetItem* UserGui::createAddTreeItem(Superpixel s) {	
+	QTreeWidgetItem *rootItem = new QTreeWidgetItem(ui->segmentsTree);
+	rootItem->setText(0, QString::number(s.m_id));
+	switch (simType)
+	{
+	case MEAN : 
+		rootItem->setText(1, QString::number(mean_similarity[s.m_id]));
+		break;
+	case SELECTED :
+		auto simRow = similarityMatrix.ptr<double>(focusSegmentId);
+		rootItem->setText(1, QString::number(simRow[s.m_id]));
+		break;
+	}
+	auto features = s.getFeatureArray();
+	auto featureNames = s.getFeatureNamesArray();
+	for (int i = 0; i < 7; i++) {
+		QTreeWidgetItem *childItem = new QTreeWidgetItem();
+		childItem->setText(0, QString::fromStdString(featureNames[i]));
+		childItem->setText(1, QString::number(features[i]));
+		rootItem->addChild(childItem);
+	}
+	return rootItem;
+}
+
+void UserGui::focusSelected(int idx) {
+	bool multiSelect = ui->checkBoxMultiSelect->isChecked();
+	if (!multiSelect)
+	{
+		ui->segmentsTree->clear();
+	}
+	int i = 0;
+	for (auto sup : sups)
+	{
+		if (i == idx)
+		{
+			QTreeWidgetItem *item = nullptr;
+			if (!selectedInTree.contains(sup.second.m_id)) 
+			{
+				item = this->createAddTreeItem(sup.second);
+				if (multiSelect) 
+				{
+					selectedInTree.insert(sup.second.m_id);
+				} else
+				{
+					focusSegmentId = sup.second.m_id;
+				}
+			}
+			if (item) {
+				if (!multiSelect) 
+				{
+					ui->segmentsTree->expandAll();
+				}
+				else 
+				{
+					ui->segmentsTree->collapseItem(item);
+				}
+			}
+			return;
+		}
+		++i;
+	}
+}
+
+void UserGui::resetBounds() {
+	for (auto i = 0; i < 6; i += 2) {
+		bounds[i] = LONG_MAX;
+		bounds[i + 1] = LONG_MIN;
+	}
+}
+
+void UserGui::addActorToBounds(vtkActor* actor) {
+	auto bnds = actor->GetBounds();
+	bounds[0] = bnds[0] < bounds[0] ? bnds[0] : bounds[0];
+	bounds[1] = bnds[1] > bounds[1] ? bnds[1] : bounds[1];
+	bounds[2] = bnds[2] < bounds[2] ? bnds[2] : bounds[2];
+	bounds[3] = bnds[3] > bounds[3] ? bnds[3] : bounds[3];
+	bounds[4] = bnds[4] < bounds[4] ? bnds[4] : bounds[4];
+	bounds[5] = bnds[5] > bounds[5] ? bnds[5] : bounds[5];
+}
+
+void UserGui::visualizeMeanSim()
+{
+	simType = MEAN;
+	resetBounds();
+	segments->InitTraversal();
+	contours->InitTraversal();
+	for (auto sup : sups)
+	{
+		vtkActor* propA = segments->GetNextItem();
+		vtkActor* propC = contours->GetNextItem();
+		setActorHeight(propA, 1000 * mean_similarity[sup.second.m_id]);
+		setActorHeight(propC, 1000 * mean_similarity[sup.second.m_id]);
+		addActorToBounds(propA);
+	}
+	addAxes();
+	constrainSpinBoxes((bounds[4] - 10) / 1000, (bounds[5] + 10) / 1000);
+	interactorStyle->ReHighlightProps();
+	renderer3D->ResetCamera();
+	ui->qvtkWidget->GetRenderWindow()->Render();
+	updateSegmentTree(mean_similarity.data());
+}
+
+void UserGui::visualizeSelectSim()
+{
+	simType = SELECTED;
+	resetBounds();
+	auto rootItem = this->ui->segmentsTree->topLevelItem(0);
+	if (rootItem) {
+		auto idx = rootItem->text(0).toInt();
+		ui->buttonSelectSim->setText(ui->buttonSelectSim->toolTip() + ": " + rootItem->text(0));
+		auto simRow = similarityMatrix.ptr<double>(idx);
+		segments->InitTraversal();
+		contours->InitTraversal();
+		for (auto sup : sups) {
+			vtkActor* propA = segments->GetNextItem();
+			vtkActor* propC = contours->GetNextItem();
+			setActorHeight(propA, 1000 * simRow[sup.second.m_id]);
+			setActorHeight(propC, 1000 * simRow[sup.second.m_id]);
+			addActorToBounds(propA);
+		}
+		addAxes();
+		constrainSpinBoxes((bounds[4] - 10) / 1000, (bounds[5] + 10) / 1000);
+		interactorStyle->ReHighlightProps();
+		renderer3D->ResetCamera();
+		ui->qvtkWidget->GetRenderWindow()->Render();
+		updateSegmentTree(simRow);
+	} else {
+		noSelectWarning();
+	}
+}
+
+void UserGui::updateSegmentTree(double *values)
+{
+	auto segtree = this->ui->segmentsTree;
+	for (int i = 0; i < segtree->topLevelItemCount(); i++)
+	{
+		auto rootItem = this->ui->segmentsTree->topLevelItem(i);
+		auto idx = rootItem->text(i).toInt();
+		rootItem->setText(1, QString::number(values[idx]));
+		// All children are always same
+		//double *featArr = sups[idx].getFeatureArray();
+		//for (auto j = 0; j < rootItem->childCount(); j++)
+		//{
+		//	rootItem->child(j)->setText(1, QString::number(featArr[j]));
+		//}
+	}
 }

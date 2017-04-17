@@ -2,7 +2,7 @@
 #include <opencv2/opencv.hpp>
 class SimilarityMatrix {
 	cv::Mat m_matrix;
-	std::vector<float> m_meanSimilarity;
+	std::vector<double> m_meanSimilarity;
 public:
 	SimilarityMatrix();
 	~SimilarityMatrix();
@@ -10,7 +10,7 @@ public:
 	template<typename Type>
 	cv::Mat& getSimilarityMatrix(std::map<int, Type> items);
 
-	std::vector<float> getMeanSimilarity() { return m_meanSimilarity; }
+	std::vector<double> getMeanSimilarity() { return m_meanSimilarity; }
 
 	cv::Mat getLastSimilarityMatrix() { return m_matrix; }
 };

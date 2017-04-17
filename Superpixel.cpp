@@ -53,6 +53,19 @@ double* Superpixel::getFeatureArray() const
 	return arr;
 }
 
+std::string* Superpixel::getFeatureNamesArray() const
+{
+	std::string *arr = new std::string[7];
+	arr[0] = "blue";
+	arr[1] = "green";
+	arr[2] = "red";
+	arr[3] = "depth";
+	arr[4] = "nX";
+	arr[5] = "nY";
+	arr[6] = "nZ";
+	return arr;
+}
+
 std::map<int, Superpixel> Superpixel::loadSuperpixels(std::string image, std::string indexes, std::string depth, std::string features) 
 {
 	// Read the image
