@@ -18,6 +18,8 @@
 #include <vtkTextProperty.h>
 #include <vtkCamera.h>
 #include <vtkTransform.h>
+#include <vtkBillboardTextActor3D.h>
+
 #include <map>
 
 #include <opencv2/opencv.hpp>
@@ -56,7 +58,7 @@ void UserGui::addAxes()
 		axes->SetZTitle("Cosine similarity");
 		axes->GetTitleTextProperty(2)->SetColor(0.0, 0.0, 1.0);
 		axes->GetLabelTextProperty(2)->SetColor(0.0, 0.0, 1.0);
-		//axes->GetLabelTextProperty(2)->SetFontSize(15);
+		axes->GetLabelTextProperty(2)->SetFontSize(15);
 
 		axes->DrawXGridlinesOn();
 		axes->DrawYGridlinesOn();
@@ -105,6 +107,7 @@ UserGui::UserGui() {
 		renderer3D->SetBackground(0.8, 0.8, 0.8);
 		this->addAxes();
 	}
+
 	// VTK/Qt wedded
 	{
 		renderer3D->ResetCamera();
@@ -376,6 +379,21 @@ void UserGui::visualizeData()
 		contours->AddItem(actor_contour);
 		// Add actor to the scene
 		renderer3D->AddActor(actor_contour);
+
+		// add labels to scene
+		//vtkSmartPointer<vtkBillboardTextActor3D> actor_label = vtkSmartPointer<vtkBillboardTextActor3D>::New();
+		//actor_label->SetInput((std::to_string(sup.second.m_id) + ".").c_str());
+		//auto pos = sup.second.getCentroid();
+		//pos[2] += 0;
+		//actor_label->SetPosition(pos);
+		//actor_label->GetTextProperty()->SetFontSize(25);
+		//actor_label->GetTextProperty()->BoldOn();
+		//actor_label->GetTextProperty()->SetColor(1.0, 1.0, .4);
+		//actor_label->GetTextProperty()->SetJustificationToCentered();
+		//setActorHeight(actor_contour, 1000 * mean_similarity[sup.second.m_id]);
+		//labels[sup.second.m_id] = (actor_label);
+		//// Add actor to the scene
+		//renderer3D->AddActor(actor_label);
 
 		ui->progressBar->setValue(ui->progressBar->value() + 1);
 	}
@@ -733,8 +751,11 @@ void UserGui::visualizeMeanSim()
 	{
 		vtkActor* propA = segments->GetNextItem();
 		vtkActor* propC = contours->GetNextItem();
-		setActorHeight(propA, 1000 * mean_similarity[sup.second.m_id]);
-		setActorHeight(propC, 1000 * mean_similarity[sup.second.m_id]);
+		//vtkActor* propL = vtkActor::SafeDownCast(labels[sup.second.m_id]);
+		double h = 1000 * mean_similarity[sup.second.m_id];
+		setActorHeight(propA, h);
+		setActorHeight(propC, h);
+		//setActorHeight(propL, h);
 		addActorToBounds(propA);
 	}
 	addAxes();
@@ -749,18 +770,19 @@ void UserGui::visualizeSelectSim()
 {
 	simType = SELECTED;
 	resetBounds();
-	auto rootItem = this->ui->segmentsTree->topLevelItem(0);
-	if (rootItem) {
-		auto idx = rootItem->text(0).toInt();
-		ui->buttonSelectSim->setText(ui->buttonSelectSim->toolTip() + ": " + rootItem->text(0));
-		auto simRow = similarityMatrix.ptr<double>(idx);
+	if (focusSegmentId != -1) {
+		ui->buttonSelectSim->setText(ui->buttonSelectSim->toolTip() + ": " + QString::number(focusSegmentId));
+		auto simRow = similarityMatrix.ptr<double>(focusSegmentId);
 		segments->InitTraversal();
 		contours->InitTraversal();
 		for (auto sup : sups) {
 			vtkActor* propA = segments->GetNextItem();
 			vtkActor* propC = contours->GetNextItem();
-			setActorHeight(propA, 1000 * simRow[sup.second.m_id]);
-			setActorHeight(propC, 1000 * simRow[sup.second.m_id]);
+			//vtkActor* propL = vtkActor::SafeDownCast(labels[sup.second.m_id]);
+			double h = 1000 * simRow[sup.second.m_id];
+			setActorHeight(propA, h);
+			setActorHeight(propC, h);
+			//setActorHeight(propL, h);
 			addActorToBounds(propA);
 		}
 		addAxes();

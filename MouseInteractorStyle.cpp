@@ -53,6 +53,7 @@ void MouseInteractorStyle::OnLeftButtonDown()
 			}
 		}
 	}
+	this->DefaultRenderer->GetRenderWindow()->Render();
 	// Forward events
 	vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
 }
@@ -108,7 +109,8 @@ void MouseInteractorStyle::clearSelection()
 	{
 		this->DefaultRenderer->RemoveActor(actor.second);
 	}
-	this->DefaultRenderer->RemoveActor(this->OutlineActor);
+	//this->DefaultRenderer->RemoveActor(this->OutlineActor);
+	//this->OutlineActor = nullptr;
 	this->DefaultRenderer->GetRenderWindow()->Render();
 	if (selectedActor) 
 	{

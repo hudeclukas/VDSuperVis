@@ -22,6 +22,7 @@ class QTreeWidgetItem;
 // Forward VTK class declarations
 class MouseInteractorStyle;
 class vtkCubeAxesActor;
+class vtkBillboardTextActor3D;
 
 class UserGui : public QMainWindow {
 	Q_OBJECT
@@ -94,6 +95,8 @@ private:
 
 	vtkSmartPointer<vtkActorCollection> segments = vtkSmartPointer<vtkActorCollection>::New();
 	vtkSmartPointer<vtkActorCollection> contours = vtkSmartPointer<vtkActorCollection>::New();
+	std::map<int,vtkBillboardTextActor3D*> labels;
+
 	vtkSmartPointer<vtkActor> minPlane = nullptr;
 	vtkSmartPointer<vtkActor> maxPlane = nullptr;
 

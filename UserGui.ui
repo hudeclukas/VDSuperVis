@@ -242,12 +242,18 @@
             <property name="text">
              <string>Select segment</string>
             </property>
+            <property name="shortcut">
+             <string>S</string>
+            </property>
            </widget>
           </item>
           <item row="0" column="1">
            <widget class="QCheckBox" name="checkBoxMultiSelect">
             <property name="text">
              <string>MultiSelect</string>
+            </property>
+            <property name="shortcut">
+             <string>M</string>
             </property>
            </widget>
           </item>
@@ -381,7 +387,14 @@
      <addaction name="actionFSelected_color"/>
      <addaction name="actionNSelected_color"/>
     </widget>
+    <widget class="QMenu" name="menuLabels">
+     <property name="title">
+      <string>Labels</string>
+     </property>
+     <addaction name="actionShow_only_selected"/>
+    </widget>
     <addaction name="menuColors"/>
+    <addaction name="menuLabels"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuSettings"/>
@@ -429,6 +442,14 @@
   <action name="actionFilterMax_color">
    <property name="text">
     <string>Max</string>
+   </property>
+  </action>
+  <action name="actionShow_only_selected">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show only selected</string>
    </property>
   </action>
  </widget>
