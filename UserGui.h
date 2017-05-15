@@ -3,7 +3,8 @@
 
 #include <vtkSmartPointer.h>
 #include <vtkRenderWindowInteractor.h>
-#include <vtkActorCollection.h>
+#include <vtkActor.h>
+#include <vtkProp3D.h>
 
 #include <QMainWindow>
 #include <QFileDialog>
@@ -44,17 +45,18 @@ public:
 	void changeContourColor(QColor color);
 	void changeFilterPlaneMaxColor(QColor color);
 	void changeFilterPlaneMinColor(QColor color);
-	void loadData();
+	void openFileDialog();
 	void visualizeData();
 	void visualizeDataFinished();
 	void visualizationThread();
-	void flipAngle(double rotation);
-	void flipSegments(int type);
 	void showContours(bool change);
 	void minFilter(double min);
 	void maxFilter(double max);
 	void filterPlanes(bool check);
 	void filterDelete(bool check);
+	void hideZeroSimilarity(bool hide);
+	void showOnlySelected(bool show);
+	void showLabels(bool show);
 
 	void resetCameraView();
 	void clearSegmentsTree();
@@ -62,16 +64,20 @@ public:
 	void focusSelected(int idx);
 	void visualizeMeanSim();
 	void visualizeSelectSim();
-	void updateSegmentTree(double *values);
+	void updateSegmentTree(std::map<int, double> values);
 private:
 	// functions
+	void loadData(QString file);
 	void noDataWarning();
 	void noSelectWarning();
-	void setActorHeight(vtkActor *prop, double h);
+	void setPropHeight(vtkProp3D * prop, double h);
 	void constrainSpinBoxes(double min, double max);
 	void saveCameraParams();
 	vtkSmartPointer<vtkActor> generateSquare();
 	QTreeWidgetItem * createAddTreeItem(Superpixel s);
+
+	void dragEnterEvent(QDragEnterEvent *e) override;
+	void dropEvent(QDropEvent *e) override;
 
 	void resetBounds();
 	void addActorToBounds(vtkActor *actor);
@@ -88,14 +94,10 @@ private:
 	std::map<int, Superpixel> superpixels;
 	std::map<int, Superpixel> sups;
 	cv::Mat similarityMatrix;
-	std::vector<double> mean_similarity;
+	std::map<int, double> mean_similarity;
 	SimilarityMatrix sm;
 
 	double bounds[6] = { 0,1,0,1,0,1 };
-
-	vtkSmartPointer<vtkActorCollection> segments = vtkSmartPointer<vtkActorCollection>::New();
-	vtkSmartPointer<vtkActorCollection> contours = vtkSmartPointer<vtkActorCollection>::New();
-	std::map<int,vtkBillboardTextActor3D*> labels;
 
 	vtkSmartPointer<vtkActor> minPlane = nullptr;
 	vtkSmartPointer<vtkActor> maxPlane = nullptr;
@@ -118,12 +120,12 @@ private:
 	// VTK objects
 	vtkSmartPointer<vtkCubeAxesActor> axes = nullptr;
 
-	// Interactor
-	vtkSmartPointer<vtkRenderWindowInteractor> renderWindowInteractor3D = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	// Interactor style
+	vtkSmartPointer<MouseInteractorStyle> interactorStyle = nullptr;
+	
 
 	// Renderer
 	vtkSmartPointer<vtkRenderer> renderer3D = nullptr;
-	vtkSmartPointer<MouseInteractorStyle> interactorStyle = nullptr;
 
 	double position[3];
 };

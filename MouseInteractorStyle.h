@@ -8,8 +8,12 @@
 #include <QObject>
 #include <QtWidgets/QColorDialog>
 
+#include <set>
+
 class vtkActor;
 class vtkActorCollection;
+
+class Superpixel;
 
 #pragma once
 
@@ -27,11 +31,15 @@ public:
 	vtkTypeMacro(MouseInteractorStyle, vtkInteractorStyleTrackballCamera);
 
 	virtual void OnLeftButtonDown() override;
+	virtual void OnMouseWheelForward() override;
+	virtual void OnMouseWheelBackward() override;
+
 	virtual void HighlightProp(vtkProp *prop);
 	virtual void HighlightNextProps();
 	virtual void ReHighlightProps();
 
-	void setActors(vtkActorCollection *actors);
+	void setActors(std::map<int, Superpixel> *actors);
+	std::set<int> getAllSelectedActorIds();
 
 	public slots:
 	void setSelect(bool select);
@@ -54,11 +62,12 @@ private:
 								 QColor		firstSelectColor;
 								 QColor		nextSelectColor;
 								 double		PickNextColor[3];
+									int		selectedActorId = -1;
 			  vtkSmartPointer<vtkActor>		selectedActor = nullptr;
 		 std::map<vtkIdType, vtkActor*>		nextSelectedActors;
 		 std::map<vtkIdType, vtkActor*>		outlineSelectedActors;
   std::map<vtkIdType,vtkOutlineSource*>		OutlineNext;
-	vtkSmartPointer<vtkActorCollection>		actors = nullptr;
+			  std::map<int, Superpixel>		*actors = nullptr;
 };
 
 #endif

@@ -11,6 +11,8 @@
 #include <vtkOutlineSource.h>
 #include <vtkRenderWindow.h>
 
+#include "Superpixel.h"
+
 vtkStandardNewMacro(MouseInteractorStyle);
 
 void MouseInteractorStyle::OnLeftButtonDown()
@@ -25,9 +27,9 @@ void MouseInteractorStyle::OnLeftButtonDown()
 		picker->Pick(clickPos[0], clickPos[1], 0, this->DefaultRenderer);
 
 		if (picker->GetCellId() != -1) {
-			actors->InitTraversal();
-			for (vtkIdType i = 0; i < actors->GetNumberOfItems(); i++) {
-				vtkSmartPointer<vtkActor> a = actors->GetNextItem();
+
+			for (auto & act : *actors) {
+				vtkSmartPointer<vtkActor> a = act.second.segment;
 				if (a == picker->GetActor())
 				{
 					if (multiSelect)
@@ -36,18 +38,25 @@ void MouseInteractorStyle::OnLeftButtonDown()
 						{
 							selectedActor = picker->GetActor();
 							this->HighlightProp(selectedActor);
+							selectedActorId = act.second.m_id;
 						}
 						else if (a != selectedActor)
 						{
-							nextSelectedActors[i] = picker->GetActor();
+							nextSelectedActors[act.second.m_id] = picker->GetActor();
 							this->HighlightNextProps();
 						}
 					}
 					else {
+						if (selectedActor)
+						{
+							selectedActor->SetPickable(1);
+						}
 						selectedActor = picker->GetActor();
 						this->HighlightProp(selectedActor);
+						selectedActorId = act.second.m_id;
 					}
-					emit pickedActor(i);
+					selectedActor->SetPickable(0);
+					emit pickedActor(act.second.m_id);
 					break;
 				}
 			}
@@ -58,10 +67,37 @@ void MouseInteractorStyle::OnLeftButtonDown()
 	vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
 }
 
-void MouseInteractorStyle::setActors(vtkActorCollection* actors)
+void MouseInteractorStyle::OnMouseWheelForward()
+{
+	
+	// Forward events
+	vtkInteractorStyleTrackballCamera::OnMouseWheelForward();
+}
+
+void MouseInteractorStyle::OnMouseWheelBackward()
+{
+	
+	// Forward events
+	vtkInteractorStyleTrackballCamera::OnMouseWheelBackward();
+}
+
+void MouseInteractorStyle::setActors(std::map<int, Superpixel>* actors)
 {
 	this->actors = actors;
 	this->clearSelection();
+}
+
+std::set<int> MouseInteractorStyle::getAllSelectedActorIds() {
+	std::set<int> ids;
+
+	if (selectedActorId != -1) {
+		ids.insert(selectedActorId);
+		for (auto act : nextSelectedActors)
+		{
+			ids.insert(act.first);
+		}
+	}
+	return ids;
 }
 
 void MouseInteractorStyle::setSelect(bool select)
@@ -114,9 +150,11 @@ void MouseInteractorStyle::clearSelection()
 	this->DefaultRenderer->GetRenderWindow()->Render();
 	if (selectedActor) 
 	{
+		selectedActor->SetPickable(1);
 		selectedActor->Delete();
 		selectedActor = nullptr;
 	}
+	selectedActorId = -1;
 	nextSelectedActors.clear();
 	outlineSelectedActors.clear();
 	OutlineNext.clear();

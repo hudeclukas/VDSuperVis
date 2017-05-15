@@ -5,6 +5,7 @@
 #include "ui_UserGui.h"
 
 #include <QtConcurrent/QtConcurrent>
+#include <QDragEnterEvent>
 #include <QMessageBox>
 
 #include <vtkPolyDataMapper.h>
@@ -21,6 +22,7 @@
 #include <vtkBillboardTextActor3D.h>
 
 #include <map>
+#include <set>
 
 #include <opencv2/opencv.hpp>
 
@@ -89,15 +91,13 @@ void UserGui::addAxes()
 UserGui::UserGui() {
 	// Setup QT Gui
 	{
+		setAcceptDrops(true);
 		this->ui = new Ui_UserGui;
 		this->ui->setupUi(this);
 		this->ui->progressBar->hide();
 		this->fileDialog = new QFileDialog(nullptr, tr("Select image"), QString(), tr("Image Files (*.jpg)"));
 		this->colorDialog = new QColorDialog(QColor(255, 0, 0));
 		this->colorDialog->setOption(QColorDialog::ShowAlphaChannel);
-		this->ui->flipBox->setItemData(0, tr("Base segment view"), Qt::ToolTipRole);
-		this->ui->flipBox->setItemData(1, tr("Rotate segments 90deg by X axis"), Qt::ToolTipRole);
-		this->ui->flipBox->setItemData(2, tr("Set segments to follow camera"), Qt::ToolTipRole);
 		this->ui->segmentsTree->setSortingEnabled(true);
 		this->ui->segmentsTree->sortByColumn(0, Qt::AscendingOrder);
 	}
@@ -127,7 +127,7 @@ UserGui::UserGui() {
 	// Set up action signals and slots
 	{
 		connect(this->ui->actionExit, SIGNAL(triggered()), this, SLOT(slotExit()));
-		connect(this->ui->actionLoad_data, SIGNAL(triggered()), this, SLOT(loadData()));
+		connect(this->ui->actionLoad_data, SIGNAL(triggered()), this, SLOT(openFileDialog()));
 		connect(this->ui->actionContour_color, SIGNAL(triggered()), this, SLOT(contourColorPicker()));
 		connect(this->ui->actionFilterMin_color, SIGNAL(triggered()), this, SLOT(filterPlaneMinColorPicker()));
 		connect(this->ui->actionFilterMax_color, SIGNAL(triggered()), this, SLOT(filterPlaneMaxColorPicker()));
@@ -135,12 +135,13 @@ UserGui::UserGui() {
 		connect(this->ui->actionFSelected_color, SIGNAL(triggered()), this, SLOT(selectFirstColorPicker()));
 		connect(this->ui->actionNSelected_color, SIGNAL(triggered()), this, SLOT(selectNextColorPicker()));
 		connect(this->ui->buttonVisualize, SIGNAL(clicked()), this, SLOT(visualizeData()));
-		connect(this->ui->flipBox, SIGNAL(currentIndexChanged(int)), this, SLOT(flipSegments(int)));
 		connect(this->ui->checkboxContours, SIGNAL(clicked(bool)), this, SLOT(showContours(bool)));
+		connect(this->ui->checkBoxLabels, SIGNAL(clicked(bool)), this, SLOT(showLabels(bool)));
 		connect(this->ui->minSimilarity, SIGNAL(valueChanged(double)), this, SLOT(minFilter(double)));
 		connect(this->ui->maxSimilarity, SIGNAL(valueChanged(double)), this, SLOT(maxFilter(double)));
 		connect(this->ui->checkBoxPlanes, SIGNAL(clicked(bool)), this, SLOT(filterPlanes(bool)));
 		connect(this->ui->checkBoxDelete, SIGNAL(clicked(bool)), this, SLOT(filterDelete(bool)));
+		connect(this->ui->actionHide_0_Similarity, SIGNAL(triggered(bool)), this, SLOT(hideZeroSimilarity(bool)));
 		connect(&this->FutureWatcher, SIGNAL(finished()), this, SLOT(visualizeDataFinished()));
 
 		connect(this->ui->buttonResetView, SIGNAL(clicked()), this, SLOT(resetCameraView()));
@@ -150,8 +151,26 @@ UserGui::UserGui() {
 		connect(this->ui->checkBoxSelect, SIGNAL(clicked(bool)), interactorStyle, SLOT(setSelect(bool)));
 		connect(this->ui->checkBoxMultiSelect, SIGNAL(clicked(bool)), interactorStyle, SLOT(setMultiSelect(bool)));
 		connect(this->interactorStyle, SIGNAL(pickedActor(int)), this, SLOT(focusSelected(int)));
+		connect(this->ui->checkBoxOnlySelected, SIGNAL(clicked(bool)), this, SLOT(showOnlySelected(bool)));
 		connect(this->ui->buttonMeanSim, SIGNAL(clicked()), this, SLOT(visualizeMeanSim()));
 		connect(this->ui->buttonSelectSim, SIGNAL(clicked()), this, SLOT(visualizeSelectSim()));
+	}
+}
+
+void UserGui::dragEnterEvent(QDragEnterEvent *e)
+{
+	if (e->mimeData()->hasUrls())
+	{
+		e->acceptProposedAction();
+	}
+}
+
+void UserGui::dropEvent(QDropEvent *e)
+{
+	foreach (const QUrl &url, e->mimeData()->urls())
+	{
+		QString fileName = url.toLocalFile();
+		loadData(fileName);
 	}
 }
 
@@ -174,14 +193,14 @@ void UserGui::noSelectWarning() {
 
 void UserGui::contourColorPicker()
 {
-	if (contours->GetNumberOfItems() == 0) {
+	if (sups.empty()) {
 		noDataWarning();
 		return;
 	}
-	contours->InitTraversal();
+
 	double old_color[3];
 	double old_opacity = 1;
-	vtkSmartPointer<vtkProperty> property = contours->GetNextItem()->GetProperty();
+	vtkSmartPointer<vtkProperty> property = sups.begin()->second.contour->GetProperty();
 	property->GetColor(old_color);
 	property->GetOpacity();
 	connect(this->colorDialog, SIGNAL(currentColorChanged(QColor)), this, SLOT(changeContourColor(QColor)));
@@ -193,12 +212,11 @@ void UserGui::contourColorPicker()
 }
 
 void UserGui::changeContourColor(QColor color) {
-	if (!contours) {
+	if (sups.empty()) {
 		return;
 	}
-	contours->InitTraversal();
-	for (vtkIdType i = 0; i < contours->GetNumberOfItems(); i++) {
-		vtkSmartPointer<vtkActor> c = contours->GetNextItem();
+	for (auto &sup : sups) {
+		vtkSmartPointer<vtkActor> c = sup.second.contour;
 		c->GetProperty()->SetColor(color.redF(), color.greenF(), color.blueF());
 		c->GetProperty()->SetOpacity(color.alphaF());
 	}
@@ -284,36 +302,40 @@ void UserGui::selectNextColorPicker() {
 	disconnect(this->colorDialog, SIGNAL(currentColorChanged(QColor)), interactorStyle, SLOT(setNextSelectColor(QColor)));
 }
 
-void UserGui::loadData()
+void UserGui::openFileDialog()
 {
 	if (fileDialog->exec() == QDialog::Accepted)
 	{
 		QString file = fileDialog->selectedFiles()[0];
-		rgbPath = file.toStdString();
-		QDir base = QDir(file);
-		base.cdUp();
-		fileDialog->setDirectory(base);
-		feaPath = base.absolutePath().toStdString() + "/features.txt";
-		supPath = base.absolutePath().toStdString() + "/superpixels.png";
-		base.cdUp();
-		dptPath = base.absolutePath().toStdString() + "/depth/";
-		dptPath += QFileInfo(file).fileName().split(".")[0].toStdString() + ".png";
-
-		superpixels = Superpixel::loadSuperpixels(rgbPath, supPath, dptPath, feaPath);
-		if (superpixels.size() == 0)
-		{
-			QMessageBox::warning(this, tr("No superpixels loaded"),
-				tr("Find precomputed dataset"), QMessageBox::Ok,
-				QMessageBox::Ok);
-			return;
-		}
-		similarityMatrix = sm.getSimilarityMatrix(superpixels);
-		ui->buttonVisualize->setDisabled(false);
-		ui->rangeSelect->setDisabled(false);
-		QString range = QString::number(0) + "-" + QString::number(superpixels.size() - 1);
-		ui->rangeSelect->setPlaceholderText(range);
-		ui->rangeSelect->setText(range);
+		loadData(file);
 	}
+}
+
+void UserGui::loadData(QString file)
+{
+	rgbPath = file.toStdString();
+	QDir base = QDir(file);
+	base.cdUp();
+	fileDialog->setDirectory(base);
+	feaPath = base.absolutePath().toStdString() + "/features.txt";
+	supPath = base.absolutePath().toStdString() + "/superpixels.png";
+	base.cdUp();
+	dptPath = base.absolutePath().toStdString() + "/depth/";
+	dptPath += QFileInfo(file).fileName().split(".")[0].toStdString() + ".png";
+
+	superpixels = Superpixel::loadSuperpixels(rgbPath, supPath, dptPath, feaPath);
+	if (superpixels.size() == 0) {
+		QMessageBox::warning(this, tr("No superpixels loaded"),
+			tr("Find precomputed dataset"), QMessageBox::Ok,
+			QMessageBox::Ok);
+		return;
+	}
+	similarityMatrix = sm.getSimilarityMatrix(superpixels);
+	ui->buttonVisualize->setDisabled(false);
+	ui->rangeSelect->setDisabled(false);
+	QString range = QString::number(superpixels.begin()->second.min_id) + "-" + QString::number(superpixels.begin()->second.max_id);
+	ui->rangeSelect->setPlaceholderText(range);
+	ui->rangeSelect->setText(range);
 }
 
 void UserGui::visualizeData()
@@ -342,7 +364,10 @@ void UserGui::visualizeData()
 	sups.clear();
 	for (auto i : range) 
 	{
-		sups[i] = superpixels[i];
+		if (superpixels.find(i) != superpixels.end()) 
+		{
+			sups[i] = superpixels[i];
+		}
 	}
 
 	this->resetBounds();
@@ -351,20 +376,19 @@ void UserGui::visualizeData()
 
 	mean_similarity = sm.getMeanSimilarity();
 
-	for (auto sup : sups) {
+	bool hideZeros = ui->actionHide_0_Similarity->isChecked();
+	bool showContours = ui->checkboxContours->isChecked();
+	bool showLabels = ui->checkBoxLabels->isChecked();
+
+	for (auto &sup : sups) {
 		// Map superpixels
-		//sup.second.setHeight(1000 * mean_similarity[sup.second.m_id]);
 		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 		mapper->SetInputData(sup.second.getSuperpixel());
 		vtkSmartPointer<vtkActor> actor_segment = vtkSmartPointer<vtkActor>::New();
 		actor_segment->SetMapper(mapper);
 		actor_segment->GetProperty()->SetPointSize(2);
-		setActorHeight(actor_segment, 1000 * mean_similarity[sup.second.m_id]);
-		segments->AddItem(actor_segment);
-		// Add the actor to the scene
-		renderer3D->AddActor(actor_segment);
-
-		this->addActorToBounds(actor_segment);
+		setPropHeight(actor_segment, 1000 * mean_similarity[sup.second.m_id]);
+		sup.second.segment = actor_segment;
 		
 		// get superpixels contour
 		vtkSmartPointer<vtkPolyDataMapper> mapper_contour = vtkSmartPointer<vtkPolyDataMapper>::New();
@@ -375,30 +399,49 @@ void UserGui::visualizeData()
 		actor_contour->GetProperty()->SetLineWidth(2.);
 		actor_contour->GetProperty()->SetColor(0.8, 0., 0.);
 		actor_contour->SetVisibility(ui->checkboxContours->isChecked());
-		setActorHeight(actor_contour, 1000 * mean_similarity[sup.second.m_id]);
-		contours->AddItem(actor_contour);
-		// Add actor to the scene
-		renderer3D->AddActor(actor_contour);
+		setPropHeight(actor_contour, 1000 * mean_similarity[sup.second.m_id]);
+		sup.second.contour = actor_contour;
+		if (!showContours)
+		{
+			sup.second.hideContour();
+		}
 
 		// add labels to scene
-		//vtkSmartPointer<vtkBillboardTextActor3D> actor_label = vtkSmartPointer<vtkBillboardTextActor3D>::New();
-		//actor_label->SetInput((std::to_string(sup.second.m_id) + ".").c_str());
-		//auto pos = sup.second.getCentroid();
-		//pos[2] += 0;
-		//actor_label->SetPosition(pos);
-		//actor_label->GetTextProperty()->SetFontSize(25);
-		//actor_label->GetTextProperty()->BoldOn();
-		//actor_label->GetTextProperty()->SetColor(1.0, 1.0, .4);
-		//actor_label->GetTextProperty()->SetJustificationToCentered();
-		//setActorHeight(actor_contour, 1000 * mean_similarity[sup.second.m_id]);
-		//labels[sup.second.m_id] = (actor_label);
-		//// Add actor to the scene
-		//renderer3D->AddActor(actor_label);
+		vtkSmartPointer<vtkBillboardTextActor3D> actor_label = vtkSmartPointer<vtkBillboardTextActor3D>::New();
+		actor_label->SetInput((std::to_string(sup.second.m_id) + ".").c_str());
+		actor_label->SetDragable(0);
+		actor_label->SetPickable(0);
+		actor_label->GetTextProperty()->SetFontSize(18);
+		actor_label->GetTextProperty()->BoldOn();
+		actor_label->GetTextProperty()->SetColor(.02, .02, .02);
+		actor_label->GetTextProperty()->SetJustificationToCentered();
+		auto pos = sup.second.getCentroid();
+		pos[2] = 5 + 1000 * mean_similarity[sup.second.m_id];
+		actor_label->SetPosition(pos);
+		// transformation is not working - must set position
+		//setPropHeight(actor_label, 10 + 1000 * mean_similarity[sup.second.m_id]);
+		sup.second.label = actor_label;
+		if (!showLabels) {
+			sup.second.hideLabel();
+		}
+		
+		// Add all segments except ZERO to the scene
+		if (mean_similarity[sup.second.m_id] == 0 && hideZeros) {
+			sup.second.hide();
+		}
+		else {
+			renderer3D->AddActor(actor_segment);
+			this->addActorToBounds(actor_segment);
+			// Add the contour to the scene
+			renderer3D->AddActor(actor_contour);
+			//// Add actor to the scene
+			renderer3D->AddActor(actor_label);
+		}
 
 		ui->progressBar->setValue(ui->progressBar->value() + 1);
 	}
 
-	interactorStyle->setActors(segments);
+	interactorStyle->setActors(&sups);
 	constrainSpinBoxes((bounds[4]-10)/1000, (bounds[5]+10)/1000);
 	addAxes();
 	this->ui->qvtkWidget->GetRenderWindow()->Render();
@@ -415,7 +458,7 @@ void UserGui::visualizeDataFinished()
 	this->ui->progressBar->hide();
 }
 
-void UserGui::setActorHeight(vtkActor* prop, double h)
+void UserGui::setPropHeight(vtkProp3D* prop, double h)
 {
 	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
 	transform->PostMultiply(); //this is the key line
@@ -423,62 +466,38 @@ void UserGui::setActorHeight(vtkActor* prop, double h)
 	prop->SetUserTransform(transform);
 }
 
-
-void UserGui::flipAngle(double rotation)
+void UserGui::showContours(bool change)
 {
-	if (!segments)
-	{
+	if (sups.empty()) {
 		return;
 	}
-	segments->InitTraversal();
-	contours->InitTraversal();
-	for (vtkIdType i = 0; i < segments->GetNumberOfItems(); i++)
-	{
-		vtkSmartPointer<vtkActor> a = segments->GetNextItem();
-		auto actorTransform = a->GetUserTransform();
-		vtkTransform* actorVtkTransform = vtkTransform::SafeDownCast(actorTransform);
-		auto positionTransform = actorVtkTransform->GetPosition();
-		auto positionCentroid = superpixels[i].getCentroid();
-		positionCentroid[2] = positionTransform[2];
-		vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-		transform->PostMultiply(); //this is the key line
-		transform->Translate(-positionCentroid[0], -positionCentroid[1], -positionCentroid[2]);
-		transform->RotateX(rotation);
-		transform->Translate(positionCentroid);
-		a->SetUserTransform(transform);
-
-		vtkSmartPointer<vtkActor> b = contours->GetNextItem();
-		b->SetUserTransform(transform);
+	for (auto &sup : sups) {
+		sup.second.setContourVisibility(change);
 	}
 	this->ui->qvtkWidget->GetRenderWindow()->Render();
 }
 
-void UserGui::flipSegments(int type)
-{
-	switch (type)
-	{
-	case 0:
-		flipAngle(0);
-		return;
-	case 1:
-		flipAngle(-90);
-		return;
-	case 2:
-		vtkSmartPointer<vtkCamera> camera = renderer3D->GetActiveCamera();
-		auto orientation = camera->GetOrientation();
-		cout << orientation[0] << " " << orientation[1] << " " << orientation[2] << " " << orientation[3] << endl;
+void UserGui::showLabels(bool show) {
+	for (auto& sup : sups) {
+		sup.second.setLabelVisibility(show);
 	}
+	this->ui->qvtkWidget->GetRenderWindow()->Render();
 }
 
-void UserGui::showContours(bool change)
-{
-	if (!contours) {
+void UserGui::showOnlySelected(bool show) {
+	auto selectedIds = interactorStyle->getAllSelectedActorIds();
+	if (selectedIds.empty()) {
 		return;
 	}
-	contours->InitTraversal();
-	for (vtkIdType i = 0; i < contours->GetNumberOfItems(); i++) {
-		vtkSmartPointer<vtkActor> c = contours->GetNextItem();
-		c->SetVisibility(change);
+	for (auto &sup : sups) {
+		if (selectedIds.find(sup.second.m_id) == selectedIds.end()) {
+			if (show) {
+				sup.second.hide();
+			}
+			else {
+				sup.second.show();
+			}
+		}
 	}
 	this->ui->qvtkWidget->GetRenderWindow()->Render();
 }
@@ -536,6 +555,8 @@ void UserGui::minFilter(double min)
 	if (minPlane == nullptr)
 	{
 		minPlane = generateSquare();
+		minPlane->PickableOff();
+		minPlane->DragableOff();
 		minPlane->SetScale(bounds[1] - bounds[0], bounds[3] - bounds[2], 1);
 		minPlane->GetProperty()->SetColor(0, 0, 1);
 		minPlane->GetProperty()->SetOpacity(0.9);
@@ -556,6 +577,8 @@ void UserGui::maxFilter(double max)
 {
 	if (maxPlane == nullptr) {
 		maxPlane = generateSquare();
+		maxPlane->PickableOff();
+		maxPlane->DragableOff();
 		maxPlane->SetScale(bounds[1] - bounds[0], bounds[3] - bounds[2], 1);
 		maxPlane->GetProperty()->SetColor(1, 0, 0);
 		maxPlane->GetProperty()->SetOpacity(0.9);
@@ -598,37 +621,62 @@ void UserGui::filterPlanes(bool check)
 
 void UserGui::filterDelete(bool deleteCheck)
 {
-	if (!segments) {
+	if (sups.empty()) {
 		return;
 	}
-	segments->InitTraversal();
-	contours->InitTraversal();
-	for (vtkIdType i = 0; i < segments->GetNumberOfItems(); i++) {
-		vtkSmartPointer<vtkActor> a = segments->GetNextItem();
-		vtkSmartPointer<vtkActor> b = contours->GetNextItem();
+	
+	for (auto &sup : sups) {
 		if (deleteCheck) {
-			auto height = a->GetBounds()[4];
+			auto height = sup.second.segment->GetBounds()[4];
 			double min = ui->minSimilarity->value();
 			double max = ui->maxSimilarity->value();
 			if (height < min * 1000 || max * 1000 < height) {
-				a->SetVisibility(false);
-				b->SetVisibility(false);
+				sup.second.hide();
 			} 
 			else
 			{
-				a->SetVisibility(true);
-				if (ui->checkboxContours->isChecked())
-					b->SetVisibility(true);
+				sup.second.show();
 			}
 		}
 		else
 		{
-			a->SetVisibility(true);
-			if (ui->checkboxContours->isChecked())
-				b->SetVisibility(true);
+			sup.second.show();
 		}
 	}
 	this->ui->qvtkWidget->GetRenderWindow()->Render();
+}
+
+void UserGui::hideZeroSimilarity(bool hide)
+{
+	resetBounds();
+	for (auto &sup : sups)
+	{
+		if (mean_similarity[sup.second.m_id] == 0)
+		{
+			if (hide)
+			{
+				sup.second.hide();
+				renderer3D->RemoveActor(sup.second.segment);
+				renderer3D->RemoveActor(sup.second.contour);
+				renderer3D->RemoveActor(sup.second.label);
+			} else
+			{
+				sup.second.show();
+				renderer3D->AddActor(sup.second.segment);
+				renderer3D->AddActor(sup.second.contour);
+				renderer3D->AddActor(sup.second.label);
+				addActorToBounds(sup.second.segment);
+			}
+		} 
+		else
+		{
+			addActorToBounds(sup.second.segment);
+		}
+	}
+	addAxes();
+	constrainSpinBoxes((bounds[4] - 10) / 1000, (bounds[5] + 10) / 1000);
+	this->ui->qvtkWidget->GetRenderWindow()->Render();
+	resetCameraView();
 }
 
 void UserGui::resetCameraView()
@@ -691,36 +739,28 @@ void UserGui::focusSelected(int idx) {
 	{
 		ui->segmentsTree->clear();
 	}
-	int i = 0;
-	for (auto sup : sups)
+	auto &sup = sups[idx];
+	QTreeWidgetItem *item = nullptr;
+	if (!selectedInTree.contains(sup.m_id)) 
 	{
-		if (i == idx)
+		item = this->createAddTreeItem(sup);
+		if (multiSelect) 
 		{
-			QTreeWidgetItem *item = nullptr;
-			if (!selectedInTree.contains(sup.second.m_id)) 
-			{
-				item = this->createAddTreeItem(sup.second);
-				if (multiSelect) 
-				{
-					selectedInTree.insert(sup.second.m_id);
-				} else
-				{
-					focusSegmentId = sup.second.m_id;
-				}
-			}
-			if (item) {
-				if (!multiSelect) 
-				{
-					ui->segmentsTree->expandAll();
-				}
-				else 
-				{
-					ui->segmentsTree->collapseItem(item);
-				}
-			}
-			return;
+			selectedInTree.insert(sup.m_id);
+		} else
+		{
+			focusSegmentId = sup.m_id;
 		}
-		++i;
+	}
+	if (item) {
+		if (!multiSelect) 
+		{
+			ui->segmentsTree->expandAll();
+		}
+		else 
+		{
+			ui->segmentsTree->collapseItem(item);
+		}
 	}
 }
 
@@ -745,25 +785,21 @@ void UserGui::visualizeMeanSim()
 {
 	simType = MEAN;
 	resetBounds();
-	segments->InitTraversal();
-	contours->InitTraversal();
-	for (auto sup : sups)
+	for (auto &sup : sups)
 	{
-		vtkActor* propA = segments->GetNextItem();
-		vtkActor* propC = contours->GetNextItem();
-		//vtkActor* propL = vtkActor::SafeDownCast(labels[sup.second.m_id]);
 		double h = 1000 * mean_similarity[sup.second.m_id];
-		setActorHeight(propA, h);
-		setActorHeight(propC, h);
-		//setActorHeight(propL, h);
-		addActorToBounds(propA);
+		setPropHeight(sup.second.segment, h);
+		setPropHeight(sup.second.contour, h);
+		double* pos = sup.second.label->GetPosition();
+		pos[2] = h + 5;
+		sup.second.label->SetPosition(pos);
+		addActorToBounds(sup.second.segment);
 	}
-	addAxes();
-	constrainSpinBoxes((bounds[4] - 10) / 1000, (bounds[5] + 10) / 1000);
+	hideZeroSimilarity(ui->actionHide_0_Similarity->isChecked());
 	interactorStyle->ReHighlightProps();
 	renderer3D->ResetCamera();
 	ui->qvtkWidget->GetRenderWindow()->Render();
-	updateSegmentTree(mean_similarity.data());
+	updateSegmentTree(mean_similarity);
 }
 
 void UserGui::visualizeSelectSim()
@@ -772,21 +808,18 @@ void UserGui::visualizeSelectSim()
 	resetBounds();
 	if (focusSegmentId != -1) {
 		ui->buttonSelectSim->setText(ui->buttonSelectSim->toolTip() + ": " + QString::number(focusSegmentId));
-		auto simRow = similarityMatrix.ptr<double>(focusSegmentId);
-		segments->InitTraversal();
-		contours->InitTraversal();
-		for (auto sup : sups) {
-			vtkActor* propA = segments->GetNextItem();
-			vtkActor* propC = contours->GetNextItem();
-			//vtkActor* propL = vtkActor::SafeDownCast(labels[sup.second.m_id]);
+		auto simRow = sm.getSimilarity(focusSegmentId);
+
+		for (auto &sup : sups) {
 			double h = 1000 * simRow[sup.second.m_id];
-			setActorHeight(propA, h);
-			setActorHeight(propC, h);
-			//setActorHeight(propL, h);
-			addActorToBounds(propA);
+			setPropHeight(sup.second.segment, h);
+			setPropHeight(sup.second.contour, h);
+			double* pos = sup.second.label->GetPosition();
+			pos[2] = h + 5;
+			sup.second.label->SetPosition(pos);
+			addActorToBounds(sup.second.segment);
 		}
-		addAxes();
-		constrainSpinBoxes((bounds[4] - 10) / 1000, (bounds[5] + 10) / 1000);
+		hideZeroSimilarity(ui->actionHide_0_Similarity->isChecked());
 		interactorStyle->ReHighlightProps();
 		renderer3D->ResetCamera();
 		ui->qvtkWidget->GetRenderWindow()->Render();
@@ -796,7 +829,7 @@ void UserGui::visualizeSelectSim()
 	}
 }
 
-void UserGui::updateSegmentTree(double *values)
+void UserGui::updateSegmentTree(std::map<int, double> values)
 {
 	auto segtree = this->ui->segmentsTree;
 	for (int i = 0; i < segtree->topLevelItemCount(); i++)

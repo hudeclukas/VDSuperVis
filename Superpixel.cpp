@@ -24,10 +24,12 @@
 #include <vtkCamera.h>
 #include <vtkRenderWindow.h>
 #include <vtkProperty.h>
+#include <vtkUnsignedCharArray.h>
+#include <vtkPolyData.h>
+#include <vtkBillboardTextActor3D.h>
+#include <vtkDelaunay2D.h>
 
 #include <opencv2/imgcodecs.hpp>
-#include <vtkDelaunay2D.h>
-#include <vtkVectorText.h>
 
 Superpixel::Superpixel()
 {
@@ -39,6 +41,9 @@ Superpixel::Superpixel()
 Superpixel::~Superpixel() 
 {
 }
+
+int Superpixel::max_id = 0;
+int Superpixel::min_id = 0;
 
 double* Superpixel::getFeatureArray() const
 {
@@ -100,12 +105,14 @@ std::map<int, Superpixel> Superpixel::loadSuperpixels(std::string image, std::st
 	while(!featuresFile.eof())
 	{
 		Superpixel sup;
-		featuresFile >> sup.m_id >> sup.blue >> sup.green >> sup.red >> sup.depth >> sup.nX >> sup.nY >> sup.nZ;
+		featuresFile >> sup.m_id >> sup.m_border >> sup.blue >> sup.green >> sup.red >> sup.depth >> sup.nX >> sup.nY >> sup.nZ;
 		sup.blue /= 255;
 		sup.green /= 255;
 		sup.red /= 255;
 		sup.depth /= max;
 		sup.m_colors->SetName("sup_" + sup.m_id);
+		if (sup.m_id < min_id) min_id = sup.m_id;
+		if (sup.m_id > max_id) max_id = sup.m_id;
 		superpixels[sup.m_id] = sup;
 	}
 
@@ -119,6 +126,16 @@ std::map<int, Superpixel> Superpixel::loadSuperpixels(std::string image, std::st
 				color[1] = *pixels++;
 				color[2] = *pixels++;
 				double idx = *indices++;
+				if (idx == 0) {
+					superpixels[idx].m_id =
+						superpixels[idx].red = 
+						superpixels[idx].green = 
+						superpixels[idx].blue = 
+						superpixels[idx].depth = 
+						superpixels[idx].nX = 
+						superpixels[idx].nY = 
+						superpixels[idx].nZ = 0;
+				}
 				superpixels[idx].m_points->InsertNextPoint(x, y, 0);
 				superpixels[idx].m_colors->InsertNextTypedTuple(color);
 			}
@@ -272,6 +289,8 @@ double Superpixel::cosineSimilarity(Superpixel s2)
 		denom_a += arr1[i] * arr1[i];
 		denom_b += arr2[i] * arr2[i];
 	}
+	if (denom_a == 0 || denom_b == 0)
+		return 0;
 	return dot / (sqrt(denom_a) * sqrt(denom_b));
 }
 
@@ -286,4 +305,103 @@ void Superpixel::setHeight(double h)
 		newpoints->InsertNextPoint(point);
 	}
 	m_points->DeepCopy(newpoints);
+}
+
+void Superpixel::setVisibility(bool v)
+{
+	if (v)
+	{
+		show();
+	} else
+	{
+		hide();
+	}
+}
+
+void Superpixel::setContourVisibility(bool v)
+{
+	if (v)
+	{
+		showContour();
+	} else
+	{
+		hideContour();
+	}
+}
+
+void Superpixel::setLabelVisibility(bool v)
+{
+	if (v)
+	{
+		showLabel();
+	} else
+	{
+		hideLabel();
+	}
+}
+
+void Superpixel::show()
+{
+	m_hide = false;
+	if (segment) {
+		this->segment->SetVisibility(true);
+	}
+	if (!m_hideLabel) {
+		this->showLabel();
+	}
+	if (!m_hideContour)
+	{
+		this->showContour();
+	}
+}
+
+void Superpixel::hide()
+{
+	m_hide = true;
+	if (segment) {
+		this->segment->SetVisibility(false);
+	}
+	if (contour) {
+		this->contour->SetVisibility(false);
+	}
+	if (label) {
+		this->label->SetVisibility(false);
+	}
+}
+
+void Superpixel::showContour()
+{
+	m_hideContour = false;
+	if (!m_hide)
+	{
+		if (contour) {
+			this->contour->SetVisibility(true);
+		}
+	}
+}
+
+void Superpixel::hideContour()
+{
+	m_hideContour = true;
+	if (contour) {
+		this->contour->SetVisibility(false);
+	}
+}
+
+void Superpixel::showLabel()
+{
+	m_hideLabel = false;
+	if (!m_hide) {
+		if (label) {
+			this->label->SetVisibility(true);
+		}
+	}
+}
+
+void Superpixel::hideLabel()
+{
+	m_hideLabel = true;
+	if (label) {
+		this->label->SetVisibility(false);
+	}
 }
